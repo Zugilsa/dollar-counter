@@ -4,6 +4,8 @@ import {
   RevenueSecondOrder,
   TeamSecondOrder,
   SprintSecondOrder,
+  MeetingSecondOrder,
+  EngTimeSecondOrder,
   ReclaimStatus,
 } from './types';
 
@@ -71,6 +73,43 @@ export function calcSprintCosts(so: SprintSecondOrder): CostBreakdown {
   return { direct, opp, cascade, totalMonthly, accrued };
 }
 
+// ── Meeting Waste Cost Calculation ───────────────────────
+export function calcMeetingCosts(so: MeetingSecondOrder, startDate: string): CostBreakdown {
+  const minutesSaved = so.originalMinutes - so.optimizedMinutes;
+  const totalHourlyCost = so.attendees.reduce((s, a) => s + a.hourlyCost * a.count, 0);
+  const savingsPerMeeting = (minutesSaved / 60) * totalHourlyCost;
+  const monthlySavings = savingsPerMeeting * so.frequencyPerWeek * 4.33;
+
+  // Negative = green savings
+  const direct = -monthlySavings;
+  const totalMonthly = direct;
+
+  const today = new Date().toISOString().split('T')[0];
+  const dd = daysApart(startDate, today);
+  const accrued = dd * dayRate(totalMonthly);
+
+  return { direct, opp: 0, cascade: 0, totalMonthly, accrued };
+}
+
+// ── Eng Time Allocation Cost Calculation ─────────────────
+export function calcEngTimeCosts(so: EngTimeSecondOrder, startDate: string): CostBreakdown {
+  const totalTeamCost = so.engineerCount * so.avgMonthlyCost;
+  const currentNonCoding = 1 - so.currentCodingPct;
+  const targetNonCoding = 1 - so.targetCodingPct;
+  const wastedPct = currentNonCoding - targetNonCoding;
+  // Savings from moving from current to target coding %
+  const monthlySavings = totalTeamCost * wastedPct;
+
+  const direct = -monthlySavings; // negative = green savings
+  const totalMonthly = direct;
+
+  const today = new Date().toISOString().split('T')[0];
+  const dd = daysApart(startDate, today);
+  const accrued = dd * dayRate(totalMonthly);
+
+  return { direct, opp: 0, cascade: 0, totalMonthly, accrued };
+}
+
 // ── Cost Calculation Engine ──────────────────────────────
 export function calcCosts(decision: Decision): CostBreakdown {
   const so = decision.secondOrder;
@@ -78,6 +117,16 @@ export function calcCosts(decision: Decision): CostBreakdown {
   // Sprint delay uses its own calculation engine
   if (so?.type === 'sprint_delay') {
     return calcSprintCosts(so);
+  }
+
+  // Meeting waste: savings (negative costs)
+  if (so?.type === 'meeting_waste') {
+    return calcMeetingCosts(so, decision.startDate);
+  }
+
+  // Eng time allocation: savings (negative costs)
+  if (so?.type === 'eng_time') {
+    return calcEngTimeCosts(so, decision.startDate);
   }
 
   const today = new Date().toISOString().split('T')[0];

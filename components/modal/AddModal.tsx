@@ -7,12 +7,15 @@ import {
   DecisionType,
   SecondOrder,
   TYPES,
+  MeetingAttendee,
 } from '@/lib/types';
 import Step1Type from './steps/Step1Type';
 import Step2Basic from './steps/Step2Basic';
 import Step3Revenue from './steps/Step3Revenue';
 import Step3Team from './steps/Step3Team';
 import Step3Sprint from './steps/Step3Sprint';
+import Step3Meeting from './steps/Step3Meeting';
+import Step3EngTime from './steps/Step3EngTime';
 import Step4Reclaim from './steps/Step4Reclaim';
 import CostPreview from './CostPreview';
 
@@ -47,6 +50,20 @@ const defaultForm = {
   sprintExpectedRevenue: 50000,
   sprintOriginalTargetDate: '',
   sprintDelays: [] as { date: string; weeksDelayed: number; reason: string }[],
+  // Meeting wizard
+  meetingOriginalMinutes: 60,
+  meetingOptimizedMinutes: 20,
+  meetingFrequencyPerWeek: 1,
+  meetingAttendees: [
+    { role: 'CEO', hourlyCost: 350, count: 1 },
+    { role: 'CTO', hourlyCost: 325, count: 1 },
+    { role: 'Other', hourlyCost: 100, count: 1 },
+  ] as MeetingAttendee[],
+  // Eng time wizard
+  engEngineerCount: 53,
+  engAvgMonthlyCost: 15000,
+  engCurrentCodingPct: 0.5,
+  engTargetCodingPct: 0.7,
   // Reclaim
   reclaimEnabled: false,
   reclaimTargetDate: '',
@@ -60,9 +77,9 @@ function hasWizard(type: DecisionType | null): boolean {
   return TYPES[type].wizard !== null;
 }
 
-function wizardType(type: DecisionType | null): 'revenue' | 'team' | 'sprint' | null {
+function wizardType(type: DecisionType | null): 'revenue' | 'team' | 'sprint' | 'meeting' | 'eng_time' | null {
   if (!type) return null;
-  return TYPES[type].wizard as 'revenue' | 'team' | 'sprint' | null;
+  return TYPES[type].wizard as 'revenue' | 'team' | 'sprint' | 'meeting' | 'eng_time' | null;
 }
 
 function totalSteps(type: DecisionType | null): number {
@@ -127,8 +144,26 @@ export default function AddModal({ open, onClose, onSave }: AddModalProps) {
         deliveredDate: null,
       };
     }
+    if (form.type === 'meeting_waste') {
+      return {
+        type: 'meeting_waste' as const,
+        originalMinutes: form.meetingOriginalMinutes,
+        optimizedMinutes: form.meetingOptimizedMinutes,
+        frequencyPerWeek: form.meetingFrequencyPerWeek,
+        attendees: form.meetingAttendees,
+      };
+    }
+    if (form.type === 'eng_time') {
+      return {
+        type: 'eng_time' as const,
+        engineerCount: form.engEngineerCount,
+        avgMonthlyCost: form.engAvgMonthlyCost,
+        currentCodingPct: form.engCurrentCodingPct,
+        targetCodingPct: form.engTargetCodingPct,
+      };
+    }
     return null;
-  }, [form.type, form.quota, form.attainRate, form.rampQ, form.teamSize, form.avgSalary, form.dragPct, form.attrProb, form.replaceCost, form.sprintTeamSize, form.sprintAvgSalary, form.sprintExpectedRevenue, form.sprintOriginalTargetDate, form.sprintDelays]);
+  }, [form.type, form.quota, form.attainRate, form.rampQ, form.teamSize, form.avgSalary, form.dragPct, form.attrProb, form.replaceCost, form.sprintTeamSize, form.sprintAvgSalary, form.sprintExpectedRevenue, form.sprintOriginalTargetDate, form.sprintDelays, form.meetingOriginalMinutes, form.meetingOptimizedMinutes, form.meetingFrequencyPerWeek, form.meetingAttendees, form.engEngineerCount, form.engAvgMonthlyCost, form.engCurrentCodingPct, form.engTargetCodingPct]);
 
   // Compute total monthly for reclaim preview
   const totalMonthly = useMemo(() => {
@@ -144,6 +179,17 @@ export default function AddModal({ open, onClose, onSave }: AddModalProps) {
     }
     if (secondOrder?.type === 'sprint_delay') {
       total = secondOrder.teamSize * secondOrder.avgSalary + secondOrder.expectedRevenue;
+    }
+    if (secondOrder?.type === 'meeting_waste') {
+      const minutesSaved = secondOrder.originalMinutes - secondOrder.optimizedMinutes;
+      const totalHourlyCost = secondOrder.attendees.reduce((s, a) => s + a.hourlyCost * a.count, 0);
+      const savingsPerMeeting = (minutesSaved / 60) * totalHourlyCost;
+      total = -(savingsPerMeeting * secondOrder.frequencyPerWeek * 4.33);
+    }
+    if (secondOrder?.type === 'eng_time') {
+      const teamCost = secondOrder.engineerCount * secondOrder.avgMonthlyCost;
+      const wastedPct = (1 - secondOrder.currentCodingPct) - (1 - secondOrder.targetCodingPct);
+      total = -(teamCost * wastedPct);
     }
     return total;
   }, [form.monthlyCost, secondOrder]);
@@ -204,8 +250,8 @@ export default function AddModal({ open, onClose, onSave }: AddModalProps) {
       case 'type':
         return form.type !== null;
       case 'basic':
-        // Sprint delay doesn't require monthlyCost (computed from wizard)
-        if (form.type === 'sprint_delay') {
+        // These types compute cost from wizard — don't require monthlyCost
+        if (form.type === 'sprint_delay' || form.type === 'meeting_waste' || form.type === 'eng_time') {
           return form.title.trim().length > 0 && form.startDate.length > 0;
         }
         return form.title.trim().length > 0 && form.monthlyCost > 0 && form.startDate.length > 0;
@@ -219,6 +265,12 @@ export default function AddModal({ open, onClose, onSave }: AddModalProps) {
         if (wizardType(form.type) === 'sprint') {
           return form.sprintTeamSize > 0 && form.sprintAvgSalary > 0 && form.sprintOriginalTargetDate.length > 0;
         }
+        if (wizardType(form.type) === 'meeting') {
+          return form.meetingAttendees.length > 0 && form.meetingOriginalMinutes > form.meetingOptimizedMinutes;
+        }
+        if (wizardType(form.type) === 'eng_time') {
+          return form.engEngineerCount > 0 && form.engAvgMonthlyCost > 0 && form.engTargetCodingPct > form.engCurrentCodingPct;
+        }
         return true;
       case 'reclaim':
         // Reclaim is optional -- always valid
@@ -226,7 +278,7 @@ export default function AddModal({ open, onClose, onSave }: AddModalProps) {
       default:
         return false;
     }
-  }, [logicalStep, form.type, form.title, form.monthlyCost, form.startDate, form.quota, form.teamSize, form.avgSalary, form.sprintTeamSize, form.sprintAvgSalary, form.sprintOriginalTargetDate]);
+  }, [logicalStep, form.type, form.title, form.monthlyCost, form.startDate, form.quota, form.teamSize, form.avgSalary, form.sprintTeamSize, form.sprintAvgSalary, form.sprintOriginalTargetDate, form.meetingAttendees, form.meetingOriginalMinutes, form.meetingOptimizedMinutes, form.engEngineerCount, form.engAvgMonthlyCost, form.engCurrentCodingPct, form.engTargetCodingPct]);
 
   const isFinalStep = step === maxStep;
 
@@ -384,6 +436,28 @@ export default function AddModal({ open, onClose, onSave }: AddModalProps) {
                           expectedRevenue={form.sprintExpectedRevenue}
                           originalTargetDate={form.sprintOriginalTargetDate}
                           delays={form.sprintDelays}
+                          onChange={handleChange}
+                        />
+                      )}
+
+                    {logicalStep === 'wizard' &&
+                      wizardType(form.type) === 'meeting' && (
+                        <Step3Meeting
+                          originalMinutes={form.meetingOriginalMinutes}
+                          optimizedMinutes={form.meetingOptimizedMinutes}
+                          frequencyPerWeek={form.meetingFrequencyPerWeek}
+                          attendees={form.meetingAttendees}
+                          onChange={handleChange}
+                        />
+                      )}
+
+                    {logicalStep === 'wizard' &&
+                      wizardType(form.type) === 'eng_time' && (
+                        <Step3EngTime
+                          engineerCount={form.engEngineerCount}
+                          avgMonthlyCost={form.engAvgMonthlyCost}
+                          currentCodingPct={form.engCurrentCodingPct}
+                          targetCodingPct={form.engTargetCodingPct}
                           onChange={handleChange}
                         />
                       )}

@@ -8,6 +8,8 @@ import CostLayers from './CostLayers';
 import RevenueBreakdown from './RevenueBreakdown';
 import TeamBreakdown from './TeamBreakdown';
 import SprintBreakdown from './SprintBreakdown';
+import MeetingBreakdown from './MeetingBreakdown';
+import EngTimeBreakdown from './EngTimeBreakdown';
 import DeliveryPanel from './DeliveryPanel';
 import ReclaimPanel from './ReclaimPanel';
 
@@ -35,6 +37,7 @@ export default function DecisionCard({
   const perDay = dayRate(costs.totalMonthly);
 
   const so = decision.secondOrder;
+  const isSavings = costs.totalMonthly < 0;
 
   return (
     <div
@@ -108,22 +111,32 @@ export default function DecisionCard({
           <SprintBreakdown so={so} />
         </div>
       )}
+      {so?.type === 'meeting_waste' && (
+        <div className="px-5 pb-3">
+          <MeetingBreakdown so={so} />
+        </div>
+      )}
+      {so?.type === 'eng_time' && (
+        <div className="px-5 pb-3">
+          <EngTimeBreakdown so={so} />
+        </div>
+      )}
 
       {/* ── Stats Row ──────────────────────────────────────── */}
       <div className="px-5 pb-3">
         <div className="flex items-center gap-3 text-xs text-slate-400">
           <span className="flex items-center gap-1">
             <span className="font-medium text-slate-600">{delayDays}d</span>{' '}
-            delayed
+            {isSavings ? 'tracked' : 'delayed'}
           </span>
           <span className="text-slate-200">&middot;</span>
           <span className="flex items-center gap-1">
-            <span className="font-medium text-slate-600">{fmt$(perHour)}</span>
+            <span className={`font-medium ${isSavings ? 'text-emerald-600' : 'text-slate-600'}`}>{fmt$(perHour)}</span>
             /hr
           </span>
           <span className="text-slate-200">&middot;</span>
           <span className="flex items-center gap-1">
-            <span className="font-medium text-slate-600">{fmt$(perDay)}</span>
+            <span className={`font-medium ${isSavings ? 'text-emerald-600' : 'text-slate-600'}`}>{fmt$(perDay)}</span>
             /day
           </span>
         </div>

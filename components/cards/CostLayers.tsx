@@ -43,9 +43,13 @@ export default function CostLayers({ costs, decision }: CostLayersProps) {
   const isRevenue = so?.type === 'revenue_role';
   const isTeamDrag = so?.type === 'team_blocker';
   const isSprint = so?.type === 'sprint_delay';
+  const isMeeting = so?.type === 'meeting_waste';
+  const isEngTime = so?.type === 'eng_time';
 
   // Filter layers based on decision type
   const visibleLayers = LAYERS.filter((layer) => {
+    // Meeting waste and eng time only show direct (savings)
+    if (isMeeting || isEngTime) return layer.key === 'direct';
     if (layer.key === 'opp') return isRevenue || isSprint;
     if (layer.key === 'cascade') return isTeamDrag;
     return true;
@@ -61,6 +65,8 @@ export default function CostLayers({ costs, decision }: CostLayersProps) {
       >
         {visibleLayers.map((layer, i) => {
           const value = costs[layer.key];
+          const isNegative = value < 0;
+          const displayColor = isNegative ? '#2BAE66' : layer.color;
           return (
             <div
               key={layer.key}
@@ -73,20 +79,20 @@ export default function CostLayers({ costs, decision }: CostLayersProps) {
               <div className="flex items-center gap-1.5 mb-1">
                 <div
                   className="w-2 h-2 rounded-full"
-                  style={{ backgroundColor: layer.color }}
+                  style={{ backgroundColor: displayColor }}
                 />
                 <span className="text-[11px] font-medium tracking-wide uppercase text-slate-400">
                   {layer.label}
                 </span>
               </div>
               <p className="text-sm font-semibold text-slate-800">
-                {layer.name}
+                {isNegative ? 'Savings' : layer.name}
               </p>
-              <p className="text-lg font-bold mt-0.5" style={{ color: layer.color }}>
+              <p className="text-lg font-bold mt-0.5" style={{ color: displayColor }}>
                 {fmtM(value)}
               </p>
               <p className="text-[11px] text-slate-400 mt-1 leading-tight">
-                {layer.desc}
+                {isNegative ? 'Monthly savings (green)' : layer.desc}
               </p>
               {layer.key === 'opp' && isRevenue && so?.type === 'revenue_role' && (
                 <p className="text-[10px] text-emerald-500 mt-1">
@@ -108,19 +114,25 @@ export default function CostLayers({ costs, decision }: CostLayersProps) {
         })}
 
         {/* Total column */}
-        <div className="px-4 py-3 border-l-2 border-[#0D1F30] bg-[#0D1F30]/[0.03] rounded-r-lg min-w-[120px]">
+        <div className={`px-4 py-3 border-l-2 rounded-r-lg min-w-[120px] ${
+          costs.totalMonthly < 0
+            ? 'border-emerald-500 bg-emerald-50/50'
+            : 'border-[#0D1F30] bg-[#0D1F30]/[0.03]'
+        }`}>
           <div className="flex items-center gap-1.5 mb-1">
-            <div className="w-2 h-2 rounded-full bg-[#0D1F30]" />
+            <div className={`w-2 h-2 rounded-full ${costs.totalMonthly < 0 ? 'bg-emerald-500' : 'bg-[#0D1F30]'}`} />
             <span className="text-[11px] font-medium tracking-wide uppercase text-slate-400">
               Total
             </span>
           </div>
-          <p className="text-sm font-semibold text-slate-800">All Layers</p>
-          <p className="text-lg font-bold mt-0.5 text-[#0D1F30]">
+          <p className="text-sm font-semibold text-slate-800">
+            {costs.totalMonthly < 0 ? 'Net Savings' : 'All Layers'}
+          </p>
+          <p className={`text-lg font-bold mt-0.5 ${costs.totalMonthly < 0 ? 'text-emerald-600' : 'text-[#0D1F30]'}`}>
             {fmtM(costs.totalMonthly)}
           </p>
           <p className="text-[11px] text-slate-400 mt-1 leading-tight">
-            Combined monthly burn
+            {costs.totalMonthly < 0 ? 'Monthly savings' : 'Combined monthly burn'}
           </p>
         </div>
       </div>
