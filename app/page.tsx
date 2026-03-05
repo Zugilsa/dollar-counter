@@ -85,50 +85,50 @@ export default function Home() {
     [addDecision]
   );
 
-  // Delete decision handler
+  // Delete decision handler — always remove locally
   const handleDelete = useCallback(
     async (id: string) => {
+      removeDecision(id);
       try {
         await fetch(`/api/decisions/${id}`, { method: "DELETE" });
-        removeDecision(id);
-      } catch (e) {
-        console.error("Failed to delete:", e);
+      } catch {
+        // Local removal already done
       }
     },
     [removeDecision]
   );
 
-  // Deliver sprint decision handler
+  // Deliver sprint decision handler — always update locally
   const handleDeliver = useCallback(
     async (id: string) => {
       const today = new Date().toISOString().split("T")[0];
+      deliverDecision(id, today);
       try {
         await fetch(`/api/decisions/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ deliveredDate: today }),
         });
-        deliverDecision(id, today);
-      } catch (e) {
-        console.error("Failed to deliver:", e);
+      } catch {
+        // Local update already done
       }
     },
     [deliverDecision]
   );
 
-  // Resolve decision handler
+  // Resolve decision handler — always update locally
   const handleResolve = useCallback(
     async (id: string) => {
       const today = new Date().toISOString().split("T")[0];
+      resolveDecision(id, today);
       try {
         await fetch(`/api/decisions/${id}/resolve`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ resolvedDate: today }),
         });
-        resolveDecision(id, today);
-      } catch (e) {
-        console.error("Failed to resolve:", e);
+      } catch {
+        // Local update already done
       }
     },
     [resolveDecision]
