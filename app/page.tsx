@@ -26,7 +26,9 @@ export default function Home() {
   useEffect(() => {
     fetch("/api/decisions")
       .then((r) => r.json())
-      .then((data) => setDecisions(data))
+      .then((data) => {
+        if (Array.isArray(data)) setDecisions(data);
+      })
       .catch(console.error);
   }, [setDecisions]);
 
