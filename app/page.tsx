@@ -51,6 +51,7 @@ export default function Home() {
   }, [decisions]);
 
   // Add decision handler
+  // Note: AddModal already closes itself via handleReset/onClose — do NOT call toggleAdd here
   const handleAdd = useCallback(
     async (d: Omit<Decision, "id" | "createdAt" | "updatedAt">) => {
       try {
@@ -61,20 +62,17 @@ export default function Home() {
         });
         if (!res.ok) {
           console.error("Failed to save decision:", res.status);
-          toggleAdd();
           return;
         }
         const created = await res.json();
         if (created && created.id) {
           addDecision(created);
         }
-        toggleAdd();
       } catch (e) {
         console.error("Failed to create decision:", e);
-        toggleAdd();
       }
     },
-    [addDecision, toggleAdd]
+    [addDecision]
   );
 
   // Delete decision handler
