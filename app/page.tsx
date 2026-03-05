@@ -54,23 +54,33 @@ export default function Home() {
   // Note: AddModal already closes itself via handleReset/onClose — do NOT call toggleAdd here
   const handleAdd = useCallback(
     async (d: Omit<Decision, "id" | "createdAt" | "updatedAt">) => {
+      const now = new Date().toISOString();
+      const localDecision: Decision = {
+        ...d,
+        id: `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        createdAt: now,
+        updatedAt: now,
+      };
+
       try {
         const res = await fetch("/api/decisions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(d),
         });
-        if (!res.ok) {
-          console.error("Failed to save decision:", res.status);
-          return;
+        if (res.ok) {
+          const created = await res.json();
+          if (created && created.id) {
+            addDecision(created);
+            return;
+          }
         }
-        const created = await res.json();
-        if (created && created.id) {
-          addDecision(created);
-        }
-      } catch (e) {
-        console.error("Failed to create decision:", e);
+      } catch {
+        // API unavailable — fall through to local add
       }
+
+      // Add locally even if API fails
+      addDecision(localDecision);
     },
     [addDecision]
   );
