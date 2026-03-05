@@ -59,11 +59,19 @@ export default function Home() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(d),
         });
+        if (!res.ok) {
+          console.error("Failed to save decision:", res.status);
+          toggleAdd();
+          return;
+        }
         const created = await res.json();
-        addDecision(created);
+        if (created && created.id) {
+          addDecision(created);
+        }
         toggleAdd();
       } catch (e) {
         console.error("Failed to create decision:", e);
+        toggleAdd();
       }
     },
     [addDecision, toggleAdd]
