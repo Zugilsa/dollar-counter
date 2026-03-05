@@ -52,9 +52,9 @@ export default function CostLayers({ costs, decision }: CostLayersProps) {
   });
 
   return (
-    <div className="rounded-lg border border-[#E1EAF2] bg-[#F8FAFC] p-4">
+    <div className="rounded-lg border border-[#E1EAF2] bg-[#F8FAFC] p-2 sm:p-4 overflow-x-auto">
       <div
-        className="grid gap-0"
+        className="grid gap-0 min-w-[400px] sm:min-w-0"
         style={{
           gridTemplateColumns: `repeat(${visibleLayers.length}, 1fr) auto`,
         }}
@@ -64,7 +64,7 @@ export default function CostLayers({ costs, decision }: CostLayersProps) {
           return (
             <div
               key={layer.key}
-              className={`px-4 py-3 ${
+              className={`px-2 sm:px-4 py-3 ${
                 i < visibleLayers.length - 1
                   ? 'border-r border-[#E1EAF2]'
                   : ''

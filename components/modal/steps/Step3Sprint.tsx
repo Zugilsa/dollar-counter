@@ -145,7 +145,7 @@ export default function Step3Sprint({
                 key={i}
                 className="flex items-start gap-2 p-3 rounded-lg border border-[#E1EAF2] bg-[#F8FAFC]"
               >
-                <div className="flex-1 grid grid-cols-3 gap-2">
+                <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <input
                     type="date"
                     value={delay.date}

@@ -31,7 +31,7 @@ export default function SprintBreakdown({ so }: SprintBreakdownProps) {
           {so.delays.map((delay, i) => (
             <div
               key={i}
-              className="flex items-center gap-3 text-xs py-1.5 px-2 rounded bg-white/60"
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs py-1.5 px-2 rounded bg-white/60"
             >
               <span className="text-indigo-500 font-medium tabular-nums shrink-0">
                 {delay.date}
@@ -39,7 +39,7 @@ export default function SprintBreakdown({ so }: SprintBreakdownProps) {
               <span className="font-bold text-indigo-800 tabular-nums shrink-0">
                 +{delay.weeksDelayed}w
               </span>
-              <span className="text-slate-500 truncate flex-1">
+              <span className="text-slate-500 truncate flex-1 min-w-[60px]">
                 {delay.reason || '—'}
               </span>
               <span className="text-indigo-600 font-semibold tabular-nums shrink-0">
