@@ -42,7 +42,7 @@ export function msRate(monthly: number): number {
 }
 
 // ── Sprint Delay Cost Calculation ────────────────────────
-export function calcSprintCosts(so: SprintSecondOrder): CostBreakdown {
+export function calcSprintCosts(so: SprintSecondOrder, resolved = false): CostBreakdown {
   const direct = so.teamSize * so.avgSalary;      // Layer 1: team salary/mo
   const opp = so.expectedRevenue;                  // Layer 2: GTM revenue delay/mo
   const cascade = 0;
@@ -51,10 +51,10 @@ export function calcSprintCosts(so: SprintSecondOrder): CostBreakdown {
   const totalMonthlyRate = direct + opp;
   const weeklyRate = totalMonthlyRate / 4.33;
 
-  // If delivered, costs stop accruing
+  // If delivered or resolved, costs stop accruing
   const delivered = !!so.deliveredDate;
 
-  const totalMonthly = delivered ? 0 : totalMonthlyRate;
+  const totalMonthly = (delivered || resolved) ? 0 : totalMonthlyRate;
 
   // Accrued: totalWeeksDelayed × weeklyRate
   // Early delivery: if deliveredDate < originalTargetDate, accrued goes negative
@@ -74,7 +74,7 @@ export function calcSprintCosts(so: SprintSecondOrder): CostBreakdown {
 }
 
 // ── Meeting Waste Cost Calculation ───────────────────────
-export function calcMeetingCosts(so: MeetingSecondOrder, startDate: string): CostBreakdown {
+export function calcMeetingCosts(so: MeetingSecondOrder, startDate: string, endDate?: string, resolved = false): CostBreakdown {
   const minutesSaved = so.originalMinutes - so.optimizedMinutes;
   const totalHourlyCost = so.attendees.reduce((s, a) => s + a.hourlyCost * a.count, 0);
   const savingsPerMeeting = (minutesSaved / 60) * totalHourlyCost;
@@ -82,17 +82,18 @@ export function calcMeetingCosts(so: MeetingSecondOrder, startDate: string): Cos
 
   // Negative = green savings
   const direct = -monthlySavings;
-  const totalMonthly = direct;
+  const monthlyRate = direct;
+  const totalMonthly = resolved ? 0 : monthlyRate;
 
-  const today = new Date().toISOString().split('T')[0];
-  const dd = daysApart(startDate, today);
-  const accrued = dd * dayRate(totalMonthly);
+  const end = endDate || new Date().toISOString().split('T')[0];
+  const dd = daysApart(startDate, end);
+  const accrued = dd * dayRate(monthlyRate);
 
   return { direct, opp: 0, cascade: 0, totalMonthly, accrued };
 }
 
 // ── Eng Time Allocation Cost Calculation ─────────────────
-export function calcEngTimeCosts(so: EngTimeSecondOrder, startDate: string): CostBreakdown {
+export function calcEngTimeCosts(so: EngTimeSecondOrder, startDate: string, endDate?: string, resolved = false): CostBreakdown {
   const totalTeamCost = so.engineerCount * so.avgMonthlyCost;
   const currentNonCoding = 1 - so.currentCodingPct;
   const targetNonCoding = 1 - so.targetCodingPct;
@@ -101,36 +102,52 @@ export function calcEngTimeCosts(so: EngTimeSecondOrder, startDate: string): Cos
   const monthlySavings = totalTeamCost * wastedPct;
 
   const direct = -monthlySavings; // negative = green savings
-  const totalMonthly = direct;
+  const monthlyRate = direct;
+  const totalMonthly = resolved ? 0 : monthlyRate;
 
-  const today = new Date().toISOString().split('T')[0];
-  const dd = daysApart(startDate, today);
-  const accrued = dd * dayRate(totalMonthly);
+  const end = endDate || new Date().toISOString().split('T')[0];
+  const dd = daysApart(startDate, end);
+  const accrued = dd * dayRate(monthlyRate);
 
   return { direct, opp: 0, cascade: 0, totalMonthly, accrued };
+}
+
+// ── Resolution-aware end date ────────────────────────────
+// If a decision has been resolved, costs freeze at the resolution date
+function effectiveEndDate(decision: Decision): string {
+  const today = new Date().toISOString().split('T')[0];
+  const resolved = decision.reclaim?.resolvedDate;
+  if (resolved && resolved < today) return resolved;
+  return today;
+}
+
+// Is this decision resolved (costs should stop accruing)?
+export function isResolved(decision: Decision): boolean {
+  return !!decision.reclaim?.resolvedDate;
 }
 
 // ── Cost Calculation Engine ──────────────────────────────
 export function calcCosts(decision: Decision): CostBreakdown {
   const so = decision.secondOrder;
+  const resolved = isResolved(decision);
 
   // Sprint delay uses its own calculation engine
   if (so?.type === 'sprint_delay') {
-    return calcSprintCosts(so);
+    return calcSprintCosts(so, resolved);
   }
 
   // Meeting waste: savings (negative costs)
   if (so?.type === 'meeting_waste') {
-    return calcMeetingCosts(so, decision.startDate);
+    return calcMeetingCosts(so, decision.startDate, effectiveEndDate(decision), resolved);
   }
 
   // Eng time allocation: savings (negative costs)
   if (so?.type === 'eng_time') {
-    return calcEngTimeCosts(so, decision.startDate);
+    return calcEngTimeCosts(so, decision.startDate, effectiveEndDate(decision), resolved);
   }
 
-  const today = new Date().toISOString().split('T')[0];
-  const dd    = daysApart(decision.startDate, today);
+  const endDate = effectiveEndDate(decision);
+  const dd    = daysApart(decision.startDate, endDate);
   const md    = dd / 30;
 
   const direct = decision.monthlyCost || 0;
@@ -150,7 +167,9 @@ export function calcCosts(decision: Decision): CostBreakdown {
     cascade = teamDrag + attrRisk;
   }
 
-  const totalMonthly = direct + opp + cascade;
+  // If resolved, monthly rate drops to 0 (no longer accruing)
+  const monthlyRate = direct + opp + cascade;
+  const totalMonthly = resolved ? 0 : monthlyRate;
 
   // Historical Accrued (ramp-aware for revenue roles)
   let accrued = dd * dayRate(direct + cascade);
@@ -189,14 +208,46 @@ export function cascadeBreakdown(so: TeamSecondOrder) {
   return { teamDrag, attrRisk, total: teamDrag + attrRisk };
 }
 
+// ── Reclaim: compute the monthly rate as if the decision were still active ──
+// (needed because calcCosts returns totalMonthly=0 for resolved decisions)
+export function activeMonthlyRate(decision: Decision): number {
+  const so = decision.secondOrder;
+  if (so?.type === 'sprint_delay') {
+    return so.teamSize * so.avgSalary + so.expectedRevenue;
+  }
+  if (so?.type === 'meeting_waste') {
+    const minutesSaved = so.originalMinutes - so.optimizedMinutes;
+    const totalHourlyCost = so.attendees.reduce((s, a) => s + a.hourlyCost * a.count, 0);
+    return -((minutesSaved / 60) * totalHourlyCost * so.frequencyPerWeek * 4.33);
+  }
+  if (so?.type === 'eng_time') {
+    const teamCost = so.engineerCount * so.avgMonthlyCost;
+    const wastedPct = (1 - so.currentCodingPct) - (1 - so.targetCodingPct);
+    return -(teamCost * wastedPct);
+  }
+  const direct = decision.monthlyCost || 0;
+  let opp = 0;
+  if (so?.type === 'revenue_role' && so.quota) {
+    const endDate = decision.reclaim?.resolvedDate || new Date().toISOString().split('T')[0];
+    const dd = daysApart(decision.startDate, endDate);
+    const md = dd / 30;
+    opp = ((so.quota * so.attainRate) / 12) * rampPct(md, so.rampQ);
+  }
+  let cascade = 0;
+  if (so?.type === 'team_blocker' && so.teamSize) {
+    cascade = so.teamSize * so.avgSalary * so.dragPct + (so.attrProb * so.replaceCost) / 12;
+  }
+  return direct + opp + cascade;
+}
+
 // ── Reclaim Status ───────────────────────────────────────
 export function getReclaimStatus(decision: Decision): ReclaimStatus {
   const r = decision.reclaim;
   if (!r?.enabled || !r?.targetDate) return null;
 
   const today = new Date().toISOString().split('T')[0];
-  const costs = calcCosts(decision);
-  const dr    = dayRate(costs.totalMonthly);
+  // Use the active monthly rate (not the resolved 0 rate) for delta calculations
+  const dr = dayRate(activeMonthlyRate(decision));
 
   if (r.resolvedDate) {
     const early = daysApart(r.resolvedDate, r.targetDate);

@@ -2,8 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { Decision } from '@/lib/types';
-import { calcCosts, getReclaimStatus, fmt$ } from '@/lib/costs';
-import { isCompleted } from '@/lib/store';
+import { calcCosts, getReclaimStatus, fmt$, isResolved, activeMonthlyRate, dayRate } from '@/lib/costs';
 import TotalCounter from './TotalCounter';
 
 interface DashboardHeaderProps {
@@ -42,20 +41,18 @@ export default function DashboardHeader({ decisions }: DashboardHeaderProps) {
         }
 
         // Calculate cost/savings this year
-        // Only count time within this calendar year
+        // Use the active monthly rate (not the resolved 0 rate) for period calculation
+        const rate = isResolved(d) ? activeMonthlyRate(d) : costs.totalMonthly;
         const dStart = d.startDate > yearStart ? d.startDate : yearStart;
         const dEnd = d.reclaim?.resolvedDate && d.reclaim.resolvedDate < today
           ? d.reclaim.resolvedDate
           : today;
         if (dStart < dEnd) {
           const daysInYear = Math.max(0, (new Date(dEnd).getTime() - new Date(dStart).getTime()) / 86400000);
-          const dailyRate = costs.totalMonthly / 22; // work days
-          const yearAmount = daysInYear * dailyRate;
-          if (isCompleted(d)) {
-            // Completed decisions represent locked-in savings (for savings types) or stopped cost
-            savingsThisYear += Math.abs(yearAmount);
-          } else if (costs.totalMonthly < 0) {
-            // Active savings decisions (meeting_waste, eng_time)
+          const dailyR = dayRate(rate);
+          const yearAmount = daysInYear * dailyR;
+          if (rate < 0) {
+            // Savings decisions (meeting_waste, eng_time)
             savingsThisYear += Math.abs(yearAmount);
           } else {
             costThisYear += yearAmount;

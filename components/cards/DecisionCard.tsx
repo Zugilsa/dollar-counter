@@ -1,7 +1,7 @@
 'use client';
 
 import { Decision, TYPES } from '@/lib/types';
-import { calcCosts, daysApart, hourRate, dayRate, fmt$ } from '@/lib/costs';
+import { calcCosts, daysApart, hourRate, dayRate, fmt$, isResolved } from '@/lib/costs';
 import { useLiveCounter } from '@/hooks/useLiveCounter';
 import FlipDisplay from '@/components/flip/FlipDisplay';
 import CostLayers from './CostLayers';
@@ -37,12 +37,14 @@ export default function DecisionCard({
   const perDay = dayRate(costs.totalMonthly);
 
   const so = decision.secondOrder;
-  const isSavings = costs.totalMonthly < 0;
+  const resolved = isResolved(decision);
+  const isSavings = costs.totalMonthly < 0 || (resolved && costs.accrued < 0);
 
   return (
     <div
-      className="group bg-white border border-[#E1EAF2] rounded-[14px] shadow-sm
-        hover:shadow-md transition-shadow duration-200 overflow-hidden"
+      className={`group bg-white border rounded-[14px] shadow-sm
+        hover:shadow-md transition-shadow duration-200 overflow-hidden
+        ${resolved ? 'border-emerald-200' : 'border-[#E1EAF2]'}`}
     >
       {/* ── Header ─────────────────────────────────────────── */}
       <div className="px-5 pt-4 pb-3 flex items-start justify-between gap-3">
@@ -143,18 +145,20 @@ export default function DecisionCard({
       </div>
 
       {/* ── Live Session Counter ───────────────────────────── */}
-      <div className="mx-5 mb-3 rounded-lg bg-[#0D1F30] p-3 flex items-center justify-between">
-        <span className="text-[10px] font-semibold tracking-widest uppercase text-slate-400">
-          This session
-        </span>
-        <FlipDisplay value={liveValue} size="sm" />
-      </div>
+      {!resolved && (
+        <div className="mx-5 mb-3 rounded-lg bg-[#0D1F30] p-3 flex items-center justify-between">
+          <span className="text-[10px] font-semibold tracking-widest uppercase text-slate-400">
+            This session
+          </span>
+          <FlipDisplay value={liveValue} size="sm" />
+        </div>
+      )}
 
-      {/* ── Total Accrued ──────────────────────────────────── */}
+      {/* ── Total Accrued / Booked ────────────────────────── */}
       <div className="px-5 pb-3">
         <div className="flex items-center justify-between">
           <span className="text-xs text-slate-400 uppercase tracking-wide font-medium">
-            Total accrued
+            {resolved ? 'Final cost (booked)' : 'Total accrued'}
           </span>
           <span
             className="text-lg font-bold"

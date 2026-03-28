@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Decision } from '@/lib/types';
-import { calcCosts, dayRate } from '@/lib/costs';
+import { calcCosts, dayRate, isResolved } from '@/lib/costs';
 import { useLiveCounter } from '@/hooks/useLiveCounter';
 import FlipDisplay from '@/components/flip/FlipDisplay';
 
@@ -74,17 +74,10 @@ function formatTime(totalSec: number): string {
   return `${s}s`;
 }
 
-// ── Year-to-date helpers ─────────────────────────────────
-function daysThisYear(startDate: string): number {
-  const yearStart = new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0];
-  const today = new Date().toISOString().split('T')[0];
-  const effectiveStart = startDate > yearStart ? startDate : yearStart;
-  const ms = new Date(today).getTime() - new Date(effectiveStart).getTime();
-  return Math.max(0, ms / 86400000);
-}
 
 export default function TotalCounter({ decisions }: TotalCounterProps) {
   // Split monthly rates into cost vs savings
+  // Resolved decisions have totalMonthly=0 — their accrued is already frozen
   const { costMonthly, savingsMonthly, costYTD, savingsYTD } = useMemo(() => {
     let costMonthly = 0;
     let savingsMonthly = 0;
@@ -93,15 +86,36 @@ export default function TotalCounter({ decisions }: TotalCounterProps) {
 
     for (const d of decisions) {
       const costs = calcCosts(d);
-      const days = daysThisYear(d.startDate);
-      const dr = dayRate(costs.totalMonthly);
+      const resolved = isResolved(d);
 
-      if (costs.totalMonthly >= 0) {
-        costMonthly += costs.totalMonthly;
-        costYTD += days * dr;
-      } else {
-        savingsMonthly += costs.totalMonthly; // negative
-        savingsYTD += days * dr; // negative
+      // YTD: use accrued (already capped at resolvedDate by calcCosts)
+      // But scope to this calendar year
+      const yearStart = new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0];
+      const effectiveStart = d.startDate > yearStart ? d.startDate : yearStart;
+      const endDate = d.reclaim?.resolvedDate && d.reclaim.resolvedDate < new Date().toISOString().split('T')[0]
+        ? d.reclaim.resolvedDate
+        : new Date().toISOString().split('T')[0];
+
+      if (effectiveStart < endDate) {
+        // Use the rate from cost layers (before resolution zeroing)
+        const rate = costs.direct + costs.opp + costs.cascade;
+        const days = (new Date(endDate).getTime() - new Date(effectiveStart).getTime()) / 86400000;
+        const ytdAmount = days * dayRate(rate);
+
+        if (rate >= 0) {
+          costYTD += ytdAmount;
+        } else {
+          savingsYTD += ytdAmount; // negative
+        }
+      }
+
+      // Live counter rates: only count active (non-resolved) decisions
+      if (!resolved) {
+        if (costs.totalMonthly >= 0) {
+          costMonthly += costs.totalMonthly;
+        } else {
+          savingsMonthly += costs.totalMonthly; // negative
+        }
       }
     }
 
