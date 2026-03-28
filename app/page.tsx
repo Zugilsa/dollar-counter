@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useCallback, useMemo } from "react";
-import { useDecisionStore } from "@/lib/store";
+import { useDecisionStore, isCompleted, ViewMode } from "@/lib/store";
 import { Decision, TYPES } from "@/lib/types";
 import DashboardHeader from "@/components/header/DashboardHeader";
 import TabBar from "@/components/ui/TabBar";
@@ -12,6 +12,7 @@ export default function Home() {
   const {
     decisions,
     tab,
+    view,
     showAdd,
     setDecisions,
     addDecision,
@@ -19,36 +20,64 @@ export default function Home() {
     resolveDecision,
     deliverDecision,
     setTab,
+    setView,
     toggleAdd,
   } = useDecisionStore();
 
-  // Fetch decisions on mount
+  // Fetch decisions on mount — merge API data with any local-only decisions
   useEffect(() => {
     fetch("/api/decisions")
       .then((r) => r.json())
       .then((data) => {
-        if (Array.isArray(data)) setDecisions(data);
+        if (!Array.isArray(data)) return;
+        // Keep local-only decisions that aren't in the API response
+        const apiIds = new Set(data.map((d: Decision) => d.id));
+        const localOnly = decisions.filter(
+          (d) => d.id.startsWith("local_") && !apiIds.has(d.id)
+        );
+        setDecisions([...data, ...localOnly]);
       })
-      .catch(console.error);
+      .catch(() => {
+        // API unavailable — keep whatever is in localStorage (via persist)
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setDecisions]);
 
-  // Filter by tab
+  // Filter by view (active vs completed) then by tab
+  const viewFiltered = useMemo(
+    () =>
+      view === "active"
+        ? decisions.filter((d) => !isCompleted(d))
+        : decisions.filter((d) => isCompleted(d)),
+    [decisions, view]
+  );
+
   const filtered = useMemo(
     () =>
       tab === "all"
-        ? decisions
-        : decisions.filter((d) => d.type === tab),
-    [decisions, tab]
+        ? viewFiltered
+        : viewFiltered.filter((d) => d.type === tab),
+    [viewFiltered, tab]
   );
 
-  // Tab counts
+  // Tab counts (based on current view)
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: decisions.length };
+    const c: Record<string, number> = { all: viewFiltered.length };
     for (const t of Object.keys(TYPES)) {
-      c[t] = decisions.filter((d) => d.type === t).length;
+      c[t] = viewFiltered.filter((d) => d.type === t).length;
     }
     return c;
-  }, [decisions]);
+  }, [viewFiltered]);
+
+  // Counts for the view toggle
+  const activeCount = useMemo(
+    () => decisions.filter((d) => !isCompleted(d)).length,
+    [decisions]
+  );
+  const completedCount = useMemo(
+    () => decisions.filter((d) => isCompleted(d)).length,
+    [decisions]
+  );
 
   // Add decision handler
   // Note: AddModal already closes itself via handleReset/onClose — do NOT call toggleAdd here
@@ -141,19 +170,60 @@ export default function Home() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Tab bar + Add button */}
-        <div className="flex items-center justify-between gap-4 mb-6">
-          <div className="flex-1 min-w-0">
-            <TabBar active={tab} onChange={setTab} counts={counts} />
+        {/* View toggle + Add button row */}
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div
+            className="inline-flex rounded-[9px] p-0.5"
+            style={{ background: '#E1EAF2' }}
+          >
+            {([
+              { key: 'active' as ViewMode, label: 'Active', count: activeCount },
+              { key: 'completed' as ViewMode, label: 'Savings', count: completedCount },
+            ]).map(({ key, label, count }) => (
+              <button
+                key={key}
+                onClick={() => setView(key)}
+                className={`
+                  inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5
+                  text-sm font-semibold rounded-[7px] transition-all duration-150
+                  ${
+                    view === key
+                      ? 'bg-white text-slate-800 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }
+                `}
+              >
+                {label}
+                <span
+                  className={`
+                    inline-flex items-center justify-center
+                    min-w-[20px] h-5 px-1.5 text-xs font-semibold
+                    rounded-full tabular-nums
+                    ${
+                      view === key
+                        ? 'bg-slate-100 text-slate-600'
+                        : 'bg-slate-200/60 text-slate-400'
+                    }
+                  `}
+                >
+                  {count}
+                </span>
+              </button>
+            ))}
           </div>
           <button
             onClick={toggleAdd}
-            className="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 rounded-[9px] text-white font-semibold text-sm transition-all hover:shadow-lg active:scale-95"
+            className="flex-shrink-0 flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-[9px] text-white font-semibold text-sm transition-all hover:shadow-lg active:scale-95"
             style={{ background: "#1DA1F2" }}
           >
             <span className="text-lg leading-none">+</span>
-            Add Decision
+            <span className="hidden sm:inline">Add Decision</span>
+            <span className="sm:hidden">Add</span>
           </button>
+        </div>
+        {/* Tab bar */}
+        <div className="mb-6">
+          <TabBar active={tab} onChange={setTab} counts={counts} />
         </div>
 
         {/* Decision Cards Grid */}
@@ -161,11 +231,14 @@ export default function Home() {
           <div className="text-center py-20">
             <div className="text-5xl mb-4 opacity-30">&#9672;</div>
             <p className="text-slate-400 text-lg font-medium">
-              No decisions tracked yet
+              {view === "completed"
+                ? "No completed savings yet"
+                : "No decisions tracked yet"}
             </p>
             <p className="text-slate-400 text-sm mt-1">
-              Click &quot;Add Decision&quot; to start quantifying your decision
-              costs
+              {view === "completed"
+                ? "Resolve active decisions to see your savings here"
+                : 'Click "Add Decision" to start quantifying your decision costs'}
             </p>
           </div>
         ) : (

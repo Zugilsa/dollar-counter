@@ -250,8 +250,8 @@ export default function AddModal({ open, onClose, onSave }: AddModalProps) {
       case 'type':
         return form.type !== null;
       case 'basic':
-        // These types compute cost from wizard — don't require monthlyCost
-        if (form.type === 'sprint_delay' || form.type === 'meeting_waste' || form.type === 'eng_time') {
+        // Wizard types derive cost from their step 3 — don't require monthlyCost
+        if (hasWizard(form.type)) {
           return form.title.trim().length > 0 && form.startDate.length > 0;
         }
         return form.title.trim().length > 0 && form.monthlyCost > 0 && form.startDate.length > 0;
@@ -401,8 +401,8 @@ export default function AddModal({ open, onClose, onSave }: AddModalProps) {
                         title={form.title}
                         monthlyCost={form.monthlyCost}
                         startDate={form.startDate}
-                        note={form.note}
                         onChange={handleChange}
+                        hideCost={hasWizard(form.type)}
                       />
                     )}
 

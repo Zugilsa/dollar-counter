@@ -78,12 +78,12 @@ export default function DecisionCard({
           </div>
         </div>
 
-        {/* Delete button */}
+        {/* Delete button — always visible on mobile, hover-reveal on desktop */}
         <button
           onClick={() => onDelete(decision.id)}
           className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center
             text-slate-300 hover:text-red-500 hover:bg-red-50
-            transition-colors duration-150 opacity-0 group-hover:opacity-100"
+            transition-colors duration-150 sm:opacity-0 sm:group-hover:opacity-100"
           title="Delete decision"
         >
           <span className="text-lg leading-none">&times;</span>

@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import { Decision } from '@/lib/types';
 import { calcCosts, getReclaimStatus, fmt$ } from '@/lib/costs';
+import { isCompleted } from '@/lib/store';
 import TotalCounter from './TotalCounter';
 
 interface DashboardHeaderProps {
@@ -17,38 +18,60 @@ interface StatCardData {
 
 export default function DashboardHeader({ decisions }: DashboardHeaderProps) {
   // Aggregate cost breakdown across all decisions
-  const { totalAccrued, monthlyBurn, directSum, oppSum, cascadeSum, overdueCount } =
+  const { totalAccrued, monthlyBurn, directSum, overdueCount, costThisYear, savingsThisYear } =
     useMemo(() => {
       let totalAccrued = 0;
       let monthlyBurn = 0;
       let directSum = 0;
-      let oppSum = 0;
-      let cascadeSum = 0;
       let overdueCount = 0;
+      let costThisYear = 0;
+      let savingsThisYear = 0;
+
+      const yearStart = new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0];
+      const today = new Date().toISOString().split('T')[0];
 
       for (const d of decisions) {
         const costs = calcCosts(d);
         totalAccrued += costs.accrued;
         monthlyBurn += costs.totalMonthly;
         directSum += costs.direct;
-        oppSum += costs.opp;
-        cascadeSum += costs.cascade;
 
         const status = getReclaimStatus(d);
         if (status?.status === 'overdue') {
           overdueCount++;
         }
+
+        // Calculate cost/savings this year
+        // Only count time within this calendar year
+        const dStart = d.startDate > yearStart ? d.startDate : yearStart;
+        const dEnd = d.reclaim?.resolvedDate && d.reclaim.resolvedDate < today
+          ? d.reclaim.resolvedDate
+          : today;
+        if (dStart < dEnd) {
+          const daysInYear = Math.max(0, (new Date(dEnd).getTime() - new Date(dStart).getTime()) / 86400000);
+          const dailyRate = costs.totalMonthly / 22; // work days
+          const yearAmount = daysInYear * dailyRate;
+          if (isCompleted(d)) {
+            // Completed decisions represent locked-in savings (for savings types) or stopped cost
+            savingsThisYear += Math.abs(yearAmount);
+          } else if (costs.totalMonthly < 0) {
+            // Active savings decisions (meeting_waste, eng_time)
+            savingsThisYear += Math.abs(yearAmount);
+          } else {
+            costThisYear += yearAmount;
+          }
+        }
       }
 
-      return { totalAccrued, monthlyBurn, directSum, oppSum, cascadeSum, overdueCount };
+      return { totalAccrued, monthlyBurn, directSum, overdueCount, costThisYear, savingsThisYear };
     }, [decisions]);
 
   const stats: StatCardData[] = [
-    { label: 'Total Accrued', value: fmt$(totalAccrued), color: totalAccrued < 0 ? '#2BAE66' : '#1DA1F2' },
+    { label: 'Cost This Year', value: fmt$(costThisYear), color: '#E0504A' },
+    { label: 'Savings This Year', value: fmt$(savingsThisYear), color: '#2BAE66' },
     { label: 'Monthly Burn', value: fmt$(monthlyBurn), color: '#94A3B8' },
+    { label: 'Total Accrued', value: fmt$(totalAccrued), color: totalAccrued < 0 ? '#2BAE66' : '#1DA1F2' },
     { label: 'Layer 1 Direct', value: fmt$(directSum), color: '#64748B' },
-    { label: 'Layer 2 Opportunity', value: fmt$(oppSum), color: '#2BAE66' },
-    { label: 'Layer 3 Cascade', value: fmt$(cascadeSum), color: '#F0A500' },
   ];
 
   return (
