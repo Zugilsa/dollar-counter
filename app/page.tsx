@@ -173,36 +173,52 @@ export default function Home() {
         {/* View toggle + Add button row */}
         <div className="flex items-center justify-between gap-3 mb-4">
           <div
-            className="inline-flex rounded-[9px] p-0.5"
+            className="inline-flex rounded-full p-1 relative"
             style={{ background: '#E1EAF2' }}
           >
+            {/* Sliding pill indicator */}
+            <div
+              className="absolute top-1 bottom-1 rounded-full transition-all duration-200 ease-out shadow-sm"
+              style={{
+                width: 'calc(50% - 4px)',
+                left: view === 'active' ? 4 : 'calc(50%)',
+                background: view === 'active' ? '#fff' : '#fff',
+              }}
+            />
             {([
-              { key: 'active' as ViewMode, label: 'Active', count: activeCount },
-              { key: 'completed' as ViewMode, label: 'Savings', count: completedCount },
-            ]).map(({ key, label, count }) => (
+              { key: 'active' as ViewMode, label: 'Active', count: activeCount, activeColor: 'text-slate-800' },
+              { key: 'completed' as ViewMode, label: 'Resolved', count: completedCount, activeColor: 'text-emerald-700' },
+            ]).map(({ key, label, count, activeColor }) => (
               <button
                 key={key}
                 onClick={() => setView(key)}
                 className={`
-                  inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5
-                  text-sm font-semibold rounded-[7px] transition-all duration-150
+                  relative z-10 inline-flex items-center gap-1.5 px-4 sm:px-5 py-2
+                  text-sm font-semibold rounded-full transition-colors duration-200
                   ${
                     view === key
-                      ? 'bg-white text-slate-800 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-700'
+                      ? activeColor
+                      : 'text-slate-400 hover:text-slate-600'
                   }
                 `}
               >
+                {view === key && key === 'completed' && (
+                  <svg className="w-3.5 h-3.5 text-emerald-500" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                  </svg>
+                )}
                 {label}
                 <span
                   className={`
                     inline-flex items-center justify-center
-                    min-w-[20px] h-5 px-1.5 text-xs font-semibold
+                    min-w-[20px] h-5 px-1.5 text-xs font-bold
                     rounded-full tabular-nums
                     ${
                       view === key
-                        ? 'bg-slate-100 text-slate-600'
-                        : 'bg-slate-200/60 text-slate-400'
+                        ? key === 'completed'
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-slate-100 text-slate-600'
+                        : 'bg-transparent text-slate-400'
                     }
                   `}
                 >
@@ -213,7 +229,7 @@ export default function Home() {
           </div>
           <button
             onClick={toggleAdd}
-            className="flex-shrink-0 flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-[9px] text-white font-semibold text-sm transition-all hover:shadow-lg active:scale-95"
+            className="flex-shrink-0 flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-full text-white font-semibold text-sm transition-all hover:shadow-lg active:scale-95"
             style={{ background: "#1DA1F2" }}
           >
             <span className="text-lg leading-none">+</span>
