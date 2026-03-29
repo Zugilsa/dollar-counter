@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useCallback, useMemo } from "react";
+import { useEffect, useCallback, useMemo, useRef, useState } from "react";
 import { useDecisionStore, isCompleted, ViewMode } from "@/lib/store";
 import { Decision, TYPES } from "@/lib/types";
+import { toPng } from "html-to-image";
 import DashboardHeader from "@/components/header/DashboardHeader";
 import TabBar from "@/components/ui/TabBar";
 import DecisionCard from "@/components/cards/DecisionCard";
@@ -146,6 +147,33 @@ export default function Home() {
   );
 
   // Resolve decision handler — always update locally
+  // ── Export as PNG ──────────────────────────────────────
+  const exportRef = useRef<HTMLDivElement>(null);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = useCallback(async () => {
+    if (!exportRef.current || exporting) return;
+    setExporting(true);
+    try {
+      const dataUrl = await toPng(exportRef.current, {
+        backgroundColor: "#EEF4FA",
+        pixelRatio: 2,
+        cacheBust: true,
+      });
+      const link = document.createElement("a");
+      const date = new Date().toISOString().split("T")[0];
+      const viewLabel = view === "completed" ? "resolved" : "active";
+      const tabLabel = tab === "all" ? "" : `-${tab.replace(/_/g, "-")}`;
+      link.download = `dollar-counter-${viewLabel}${tabLabel}-${date}.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch (err) {
+      console.error("Export failed:", err);
+    } finally {
+      setExporting(false);
+    }
+  }, [exporting, view, tab]);
+
   const handleResolve = useCallback(
     async (id: string) => {
       const today = new Date().toISOString().split("T")[0];
@@ -165,6 +193,8 @@ export default function Home() {
 
   return (
     <div className="min-h-screen" style={{ background: "#EEF4FA" }}>
+      {/* Exportable area: header + main content */}
+      <div ref={exportRef}>
       {/* Header */}
       <DashboardHeader decisions={decisions} />
 
@@ -227,15 +257,29 @@ export default function Home() {
               </button>
             ))}
           </div>
-          <button
-            onClick={toggleAdd}
-            className="flex-shrink-0 flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-full text-white font-semibold text-sm transition-all hover:shadow-lg active:scale-95"
-            style={{ background: "#1DA1F2" }}
-          >
-            <span className="text-lg leading-none">+</span>
-            <span className="hidden sm:inline">Add Decision</span>
-            <span className="sm:hidden">Add</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExport}
+              disabled={exporting}
+              className={`flex-shrink-0 flex items-center gap-1.5 px-3 sm:px-4 py-2.5 rounded-full text-sm font-semibold transition-all hover:shadow-md active:scale-95
+                ${exporting ? 'bg-slate-200 text-slate-400 cursor-wait' : 'bg-white text-slate-600 border border-[#E1EAF2] hover:bg-slate-50'}`}
+              title="Export as PNG"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+              </svg>
+              <span className="hidden sm:inline">{exporting ? 'Exporting...' : 'Export'}</span>
+            </button>
+            <button
+              onClick={toggleAdd}
+              className="flex-shrink-0 flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-full text-white font-semibold text-sm transition-all hover:shadow-lg active:scale-95"
+              style={{ background: "#1DA1F2" }}
+            >
+              <span className="text-lg leading-none">+</span>
+              <span className="hidden sm:inline">Add Decision</span>
+              <span className="sm:hidden">Add</span>
+            </button>
+          </div>
         </div>
         {/* Tab bar */}
         <div className="mb-6">
@@ -271,6 +315,7 @@ export default function Home() {
           </div>
         )}
       </main>
+      </div>{/* end exportable area */}
 
       {/* Add Modal */}
       <AddModal open={showAdd} onClose={toggleAdd} onSave={handleAdd} />
